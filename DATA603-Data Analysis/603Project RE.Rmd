@@ -1,0 +1,215 @@
+---
+title: "DATA603_Group_Project"
+output: html_document
+date: "2024-03-31"
+---
+
+```{r analysis, include=FALSE}
+library(ggplot2)
+library(dplyr)
+library(mosaic)
+library(resampledata)
+library(boot)
+library(olsrr)
+library(leaps)
+library(GGally)
+library(lmtest)
+library(mctest)
+library(MASS)
+```
+
+```{r}
+property_price = read.csv("new_data.csv")
+head(property_price)
+```
+
+```{r}
+property_price$RE_UNIT_PRICE <- as.numeric(property_price$RE_UNIT_PRICE)
+property_price$commu_center <- as.numeric(property_price$commu_center_per_person)
+property_price$has_hospital <- as.character(property_price$has_hospital)
+property_price$has_library <- as.character(property_price$has_library)
+property_price$has_attraction <- as.character(property_price$has_attraction)
+property_price$has_phs_clinic <- as.character(property_price$has_phs_clinic)
+property_price$has_social_ctr <- as.character(property_price$has_social_dev_ctr)
+property_price$schools_per_person <- as.numeric(property_price$schools_per_person)
+property_price$Population <- as.numeric(property_price$Population)
+property_price$Eng_ratio <- as.numeric(property_price$Eng_ratio)
+property_price$crime <- as.numeric(property_price$crime_per_person)
+property_price$disorder <- as.numeric(property_price$disorder_per_person)
+
+#remove null value in response variable
+re_unit_price = property_price[!is.na(property_price[,'RE_UNIT_PRICE']),]
+head(re_unit_price)
+```
+
+```{r}
+full = lm(RE_UNIT_PRICE~ Eng_ratio + crime + disorder + schools_per_person + commu_center + has_social_ctr + has_phs_clinic + has_attraction + has_library + has_hospital, data=re_unit_price)
+summary(full)
+first_model = lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction, data=re_unit_price)
+summary(first_model)
+```
+
+```{r}
+stepmod=ols_step_both_p(full,p_enter = 0.05, p_remove = 0.05, details=TRUE)
+summary(stepmod$model)
+```
+
+```{r}
+ExecSalFor=ols_step_forward_p(full, p_val = 0.1, details=TRUE)
+summary(ExecSalFor$model)
+```
+
+```{r}
+ExecSalBack=ols_step_backward_p(full, p_val = 0.1, details=TRUE)
+summary(ExecSalBack$model)
+```
+
+
+```{r}
+model_inter =lm(RE_UNIT_PRICE~(crime + disorder + schools_per_person + commu_center  + has_attraction)^2, data=re_unit_price)
+summary(model_inter)
+model_inter1 =lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder + crime*schools_per_person + schools_per_person*commu_center, data=re_unit_price)
+summary(model_inter1)
+model_inter2 =lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder + schools_per_person*commu_center, data=re_unit_price)
+summary(model_inter2)
+model_inter3 =lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder, data=re_unit_price)
+summary(model_inter3)
+print(anova(first_model,model_inter3))
+```
+
+
+
+```{r}
+ExecSalBack=ols_step_backward_p(model_inter, p_val = 0.05, details=TRUE)
+summary(ExecSalBack$model)
+```
+
+
+```{r}
+stepmod=ols_step_both_p(model_inter,p_enter = 0.05, p_remove = 0.1, details=TRUE)
+summary(stepmod$model)
+```
+
+```{r}
+ExecSalFor=ols_step_forward_p(model_inter, p_val = 0.1, details=TRUE)
+summary(ExecSalFor$model)
+```
+
+
+```{r}
+pairs(~RE_UNIT_PRICE+crime + disorder + schools_per_person + commu_center, data = re_unit_price, panel = panel.smooth)
+```
+
+
+```{r}
+model_high =lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder + I(crime^2), data=re_unit_price)
+summary(model_high)
+model_high1 =lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder + I(disorder^2), data=re_unit_price)
+summary(model_high1)
+model_high2 =lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder + I(schools_per_person^2), data=re_unit_price)
+summary(model_high2)
+model_high3 =lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder + I(commu_center^2), data=re_unit_price)
+summary(model_high3)
+model_high4 =lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder + I(commu_center^2) + I(commu_center^3), data=re_unit_price)
+summary(model_high4)
+```
+
+```{r}
+model_final =lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder + I(commu_center^2), data=re_unit_price)
+summary(model_final)
+print(anova(model_inter3,model_final))
+```
+
+```{r}
+# linearity
+ggplot(model_final, aes(x=.fitted, y=.resid)) +
+  geom_point() +geom_smooth()+
+  geom_hline(yintercept = 0) 
+# Equal Variance
+plot(model_final, which=1) #residuals plot
+plot(model_final, which=3) #a scale location plot
+bptest(model_final)
+# Normality
+par(mfrow=c(1,2))
+hist(residuals(model_final))
+plot(model_final, which=2) #a Normal plot
+#Testing for Normality
+shapiro.test(residuals(model_final))
+```
+
+
+```{r}
+# Multilinearity
+imcdiag(first_model, method="VIF")
+df = re_unit_price[,c("RE_UNIT_PRICE","crime", "disorder","schools_per_person", "commu_center", "has_attraction")]
+
+ggpairs(df)
+# Outliers
+plot(model_final,which=5) 
+re_unit_price[cooks.distance(model_final)>0.5,]
+plot(model_final,pch=18,col="red",which=c(4))
+lev=hatvalues(model_final)
+p = length(coef(model_final))
+n = nrow(re_unit_price)
+outlier2p = lev[lev>(2*p/n)]
+outlier3p = lev[lev>(3*p/n)]
+print("h_I>2p/n, outliers are")
+print(outlier2p)
+print("h_I>3p/n, outliers are")
+print(outlier3p)
+plot(rownames(re_unit_price),lev, main = "Leverage in RE Dataset", xlab="observation",
+    ylab = "Leverage Value")
+abline(h = 2 *p/n, lty = 1)
+abline(h = 3 *p/n, lty = 1)
+```
+
+```{r}
+newdata = re_unit_price[-c(11,29,37,38,84,89,97),]
+newdata2 = re_unit_price[-c(11),]
+model_final2 =lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder + I(commu_center^2), data=newdata)
+summary(model_final2)
+model_final3 =lm(RE_UNIT_PRICE~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder + I(commu_center^2), data=newdata2)
+summary(model_final3)
+```
+
+
+```{r}
+# linearity
+ggplot(model_final2, aes(x=.fitted, y=.resid)) +
+  geom_point() +geom_smooth()+
+  geom_hline(yintercept = 0) 
+# Equal Variance
+plot(model_final2, which=1) #residuals plot
+plot(model_final2, which=3) #a scale location plot
+bptest(model_final2)
+# Normality
+par(mfrow=c(1,2))
+hist(residuals(model_final2))
+plot(model_final2, which=2) #a Normal plot
+#Testing for Normality
+shapiro.test(residuals(model_final2))
+```
+
+```{r}
+bc=boxcox(model_final2,lambda=seq(-1,1))
+bestlambda=bc$x[which(bc$y==max(bc$y))]
+bestlambda
+bcmodel2=lm((((RE_UNIT_PRICE^0.5555)-1)/0.5555)~crime + disorder + schools_per_person + commu_center  + has_attraction +
+                  crime*disorder + I(commu_center^2), data=newdata)
+summary(bcmodel2)
+#Testing for Normality
+shapiro.test(residuals(bcmodel2))
+```
+
+
